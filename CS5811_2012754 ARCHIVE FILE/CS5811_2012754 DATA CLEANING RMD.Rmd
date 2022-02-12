@@ -1,0 +1,115 @@
+---
+title: "Distributed Data Analysis"
+author: "2012754"
+date: "21/03/21"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+#HOUSING DATA
+```{r}
+library(dplyr)
+#import dataset and inspect file
+housing <- read.csv("C:/Users/tochi/Desktop/Housing_Data_GreaterLondon_2018-20.csv", header = TRUE)
+str(housing)
+summary(housing)
+
+#drop columns
+housing_clean <- select(housing, -'saon', -'paon', -'estate_type', -'street', -'linked_data_uri', -'county', -'transaction_category', -'street', -'locality')
+view(housing_clean)
+#convert into correct date format
+housing_clean$deed_date <- as.Date(housing_clean$deed_date, format = "%Y-%m-%d")
+
+#convert into categorical
+housing_clean$property_type <- as.factor(housing_clean$property_type)
+housing_clean$new_build <- as.factor(housing_clean$new_build)
+
+#change deed date to date prior to our join
+names(housing_clean)[3] <- 'date'
+
+#format to just month and year
+housing_clean$date <- format(housing_clean$date, "%m/%Y")
+
+```
+##DATA JOINING STREET CRIME WITH HOUSING
+
+```{r}
+library(zoo)
+library(anytime)
+
+
+#read in the street data and inspect it
+street_crime <- read.csv('C:/Users/tochi/Desktop/metropolitan-street-final.csv')
+str(street_crime)
+
+#convert into categorical
+street_crime$Crime.type <- as.factor(street_crime$Crime.type)
+street_crime$postcode <- as.factor(street_crime$postcode)
+
+street_crime$Month <- anytime(street_crime$Month)
+street_crime$Month <- as.Date(street_crime$Month, format = "%Y-%m-%d")
+street_crime$Month <- format(street_crime$Month, '%m/%Y')
+
+names(street_crime)[2] <- 'date'
+
+#inner join on postcode
+Crime_Housing <- merge(housing_clean, street_crime, by = c("postcode", "date"), all.x = TRUE, all.y = TRUE)
+#create a csv file with our df
+write.csv(Crime_Housing, 'C:/Users/tochi/Desktop/Crime_Housing.csv', row.names = FALSE)
+str(Crime_Housing)
+plot(Crime_Housing$price_paid, ylab = "price_paid")
+plot(Crime_Housing$Crime.type, ylab -= "Crimetype")
+Crime_Housing <- read.csv('C:/Users/tochi/Desktop/Crime_Housing.csv')
+#inspect the data
+
+```
+#Removing Outliers and Duplicate Rows
+```{r}
+
+str(Crime_Housing)
+summary(Crime_Housing)
+boxplot(Crime_Housing$price_paid)
+Crime_Housing_boxplot <- boxplot(Crime_Housing$price_paid)
+
+
+Crime_Housing_boxplot$out
+
+min(Crime_Housing_boxplot$out)
+
+Crime_Housing[Crime_Housing$price_paid >= min(Crime_Housing_boxplot$out), ]
+
+#to remove duplicate rows
+Crime_Housing_clean <- unique(Crime_Housing)
+str(Crime_Housing_clean)
+
+##to visualise graphically
+Crime.type.freq <- xtabs(~ Crimetype, data = Crime_Housing)
+Crime.type.prop <- prop.table(Crime.type.freq)
+Crime.type.prop
+
+Price_paid.hist <- ggplot(data = Crime_Housing, aes(x = price_paid)) + geom_histogram(binwidth =10, color = "black", fill = "lightgrey") + xlab("Price_Paid") + ylab("Frequency")
+
+
+```
+#EXPLORATORY DATA ANALYSIS
+```{r}
+install.packages("GGally")
+library(GGally)
+#install.packages("mosaicData")
+
+Price_crime_rel <- Crime_Housing_clean[, c("Crimetype", "price_paid")]
+ggpairs(Price_crime_rel)
+
+
+
+
+```
+
+
+
+
+```{r}
+
