@@ -1,0 +1,301 @@
+---
+title: "Tochi Okorie Dissertation"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+
+
+```{r}
+chooseCRANmirror(graphics=FALSE, ind=1)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Dissertation
+*Tochi Okorie*
+Carbon footprints of digital systems
+
+
+```{r}
+pkgs <- c("moments", "ggplot2", "dplyr", "tidyr", "tidyverse")
+install.packages(pkgs, repos = "http://cran.us.r-project.org")
+tinytex::install_tinytex()
+library(ggplot2)
+install.packages("rlang")
+library(tidyverse)
+install.packages("lmtest", repos = "http://cran.us.r-project.org")
+```
+
+Load the merged carbon footprint data into my notebook.
+
+```{r}
+cf_data <-read.csv("C:/Users/tochi/Desktop/carbonfootprint_data.csv")
+```
+EXPLORATORY DATA ANALYSIS 
+
+Explore the data numerically and graphically. Confirm the variables that are categorical and numerical/continuous and that R has read them in #appropriately
+
+```{r}
+# inspect the dataset
+str(cf_data)
+
+# get a summary report
+summary(cf_data)
+```
+The variable "Greenhosting" should be a categorical variable (actually binary as it only has two levels). R has read it in as numerical so this can be fixed by making it into a Factor.
+
+```{r}
+#cf_data$GREEN_HOSTING<-as.factor(cf_data$GREEN_HOSTING)
+```
+
+Then i look at the distribution of the variables:
+
+```{r}
+ggplot(data = cf_data, aes(x=WEIGHT_OF_CO2_per_time_visited.grams.)) + geom_histogram(bins = 20) + theme_classic()
+ggplot(data = cf_data, aes(x=WEIGHT_OF_CARBON.In_grams_yearly.
+)) + geom_histogram(bins = 20) + theme_classic()
+ggplot(data = cf_data, aes(x=Score.percentage.)) + geom_histogram(bins = 20) + theme_classic()
+ggplot(data = cf_data, aes(x=Google_page_insights)) + geom_histogram(bins = 20) + theme_classic()
+ggplot(data = cf_data, aes(x=HTTP_REQUEST)) + geom_histogram(bins = 20) + theme_classic()
+ggplot(data = cf_data, aes(x=FINDABILITY.Mozrank.)) + geom_histogram(bins = 20) + theme_classic()
+```
+The distribution for Weight per time visited and weight of co2 yearly seems skewed to the left, other variables look generally symmetric. This does not warrant any transformations at this stage.
+
+```{r}
+ggplot(data = cf_data, aes(x=WEIGHT_OF_CO2_per_time_visited.grams., y=Energy.Kwh.)) + geom_point() + theme_classic()
+ggplot(data = cf_data, aes(x=WEIGHT_OF_CARBON.In_grams_yearly., y=Energy.Kwh.)) + geom_point() + theme_classic()
+ggplot(data = cf_data, aes(x=Score.percentage., y=Energy.Kwh.)) + geom_point()  + theme_classic()
+ggplot(data = cf_data, aes(x=Google_page_insights, y=Energy.Kwh.)) + geom_point()  + theme_classic()
+ggplot(data = cf_data, aes(x=HTTP_REQUEST, y=Energy.Kwh.)) + geom_point()  + theme_classic()
+ggplot(data = cf_data, aes(x=FINDABILITY.Mozrank., y=Energy.Kwh.)) + geom_point()  + theme_classic()
+#ggplot(cf_data, aes(x=GREEN_HOSTING, y=Energy.Kwh.)) + geom_boxplot()
+```
+The first two graphs appear to have a linear relationship while the others have no specific pattern just clusters at different regions of the graphs.The collection of scatter plots do not show that most of the variables is clearly linear, but some show a linear trend.
+
+UNSUPERVISED LEARNING
+
+Using unsupervised learning method Principal component analysis:
+
+```{r}
+# perform PCA on the cf_data dataset
+#   note: variables are centered and scaled before analysis
+pc_cf_data <- prcomp(cf_data, center = T, scale. = T)
+
+# inspect the attributes of the PCA object returned by prcomp
+attributes(pc_cf_data)
+```
+Visual analysis of PCA results{#Visual_analysis_PCA}
+
+```{r}
+# calculate the proportion of exaplained variance (PEV) from the std values
+pc_cf_data_var <- pc_cf_data$sdev^2
+pc_cf_data_var
+pc_cf_data_PEV <- pc_cf_data_var / sum(pc_cf_data_var)
+pc_cf_data_PEV
+
+# plot the variance per PC
+#   note: this can be done using the plot function on the prcomp object
+plot(pc_cf_data)
+
+# plot the cumulative value of PEV for increasing number of additional PCs
+#   note: add an 80% threshold line to inform the feature extraction
+#     according to the plot the first 3 PCs should be selected
+opar <- par()
+plot(
+  cumsum(pc_cf_data_PEV),
+  ylim = c(0,1),
+  xlab = 'PC',
+  ylab = 'cumulative PEV',
+  pch = 20,
+  col = 'orange'
+)
+abline(h = 0.8, col = 'red', lty = 'dashed')
+par(opar)
+
+# get and inspect the loadings for each PC
+#   note: loadings are reported as a rotation matrix (see lecture)
+pc_cf_data_loadings <- pc_cf_data$rotation
+pc_cf_data_loadings
+
+# plot the loadings for the first three PCs as a barplot
+#   note: two vectors for colours and labels are created for convenience
+#     for details on the other parameters see the help for barplot and legend
+opar <- par()
+colvector = c('red', 'orange', 'yellow', 'green', 'cyan', 'blue')
+labvector = c('PC1', 'PC2', 'PC3')
+barplot(
+  pc_cf_data_loadings[,c(1:3)],
+  beside = T,
+  yaxt = 'n',
+  names.arg = labvector,
+  col = colvector,
+  ylim = c(-1,1),
+  border = 'white',
+  ylab = 'loadings'
+)
+axis(2, seq(-1,1,0.1))
+legend(
+  'bottomright',
+  bty = 'n',
+  col = colvector,
+  pch = 15,
+  row.names(pc_cf_data_loadings)
+)
+par(opar)
+
+# generate a biplot for each pair of important PCs (and show them on the same page)
+#   note: the option choices is used to select the PCs - default is 1:2
+opar = par()
+par(mfrow = c(2,2))
+biplot(
+  pc_cf_data,
+  scale = 0,
+  col = c('grey40','orange')
+)
+biplot(
+  pc_cf_data,
+  choices = c(1,3),
+  scale = 0,
+  col = c('grey40','orange')
+)
+biplot(
+  pc_cf_data,
+  choices = c(2,3),
+  scale = 0,
+  col = c('grey40','orange')
+)
+par(opar)
+
+# the space of the first three PCs is better explored interactively...
+#   ...using a function from the pca3d package
+# first install pca3d
+if(require(pca3d) == FALSE){
+    install.packages('pca3d')
+}
+# then plot and explore the data by rotating/zoom with the mouse
+pca3d::pca3d(pc_cf_data, show.labels = T)
+
+# and save a snapshot of the view in png format
+pca3d::snapshotPCA3d('pc_cf_data_3D.png')
+```
+From the Principal component analysis we have the line drawn through the 4th PC which means that's how much we have explained variance up to 4 variables.
+
+
+Using pearson correlation coefficient, Focusing only on the continuous explanatory variables - check their correlations with the Energy. I want to do this only for the continuous variables, so can look to remove the column that is binary from this plot. (This is done so that the pairs plot is legible and that we can run a corr function on the resulting dataframe)
+
+```{r}
+cf_data.cont<-subset(cf_data, select=c("Energy.Kwh.", "WEIGHT_OF_CO2_per_time_visited.grams.", "WEIGHT_OF_CARBON.In_grams_yearly.", "Score.percentage.", "Google_page_insights",  "HTTP_REQUEST", "FINDABILITY.Mozrank.") )
+pairs(cf_data.cont)
+```
+```{r}
+cor(cf_data.cont)
+```
+Correlation of the coeficients have been discovered.There do not seem to be any obvious multi collinearity (highly correlated explanatory variables)except the relationship between energy and weight of CO2 per time visited and a few of the plots above point to potential for a linear relationships, therefore at this stage I am not going to explore any transformations.
+
+
+MACHINE LEARNING (SUPERVISED LEARNING)
+
+Using the continuous explanatory variables decide on a maximal model for Energy and run it.
+
+```{r}
+cf_data.lm<-lm(cf_data$Energy.Kwh.~cf_data$WEIGHT_OF_CO2_per_time_visited.grams.+cf_data$WEIGHT_OF_CARBON.In_grams_yearly.+cf_data$Score.percentage.+cf_data$Google_page_insights + cf_data$HTTP_REQUEST+cf_data$FINDABILITY.Mozrank.)
+
+summary(cf_data.lm)
+```
+I got a negative intercept and a almost seemingly over fitted model with an Rsquared of 99%. it is possible to start with a model that has interactions, all interactions could be used or a Tree approach can help understand if the relationship between an explanatory variable and the target variable is different based on the value (or range) of the explanatory variable.
+
+So i introduced a step function to get the minimal adequate model.Use a model selection approach to achieve a minimal adequate mode
+
+```{r}
+step(cf_data.lm)
+```
+My minimal adequte model has been achieved.Once I have the minimal adequate model, explain its findings and test its residuals
+
+```{r}
+mam.lm<-lm(formula = cf_data$Energy.Kwh. ~ cf_data$WEIGHT_OF_CO2_per_time_visited.grams. + cf_data$Google_page_insights + 
+    cf_data$HTTP_REQUEST + cf_data$FINDABILITY.Mozrank.)
+
+summary(mam.lm)
+```
+
+This model has acceptable goodness of fit, all the coefficients are significant (so there is no need to simplyfy further), $r^2$ is too high and the F statistic is significant.
+
+Next the residuals should be scrutinised:
+
+```{r}
+plot(mam.lm)
+```
+
+In this case the residuals look ok, the variance is quite steady in the first plot - considering the data size.
+QQ plot also looks aligned. 
+
+Now i want to model the relationship between the energy and the explanatory variables (including the ones that are not continuous).
+
+```{r}
+model.all.lm<-lm(cf_data$Energy.Kwh.~cf_data$WEIGHT_OF_CO2_per_time_visited.grams.+cf_data$WEIGHT_OF_CARBON.In_grams_yearly.+cf_data$Score.percentage.+cf_data$Google_page_insights + cf_data$HTTP_REQUEST+cf_data$FINDABILITY.Mozrank.+ cf_data$GREEN_HOSTING)
+
+summary(model.all.lm)
+```
+
+
+The $r^2 $is looking same but lets see what a step process would acheive in terms of simplifying the model:
+
+```{r}
+step(model.all.lm)
+```
+It is evident Greenhosting has an effect on this model so i would explore it further.The binary variable I added as part of the explanatory variables does  add much and this is confirmed as the step process proposes a model that does include it as an explanatory variable.
+
+```{r}
+all.mam.lm<-lm(formula = cf_data$Energy.Kwh. ~ cf_data$WEIGHT_OF_CO2_per_time_visited.grams. + cf_data$Google_page_insights + cf_data$HTTP_REQUEST + cf_data$FINDABILITY.Mozrank.+cf_data$GREEN_HOSTING)
+
+summary(all.mam.lm)
+plot(all.mam.lm)
+
+```
+Now i have to optimise the model to reduce the chances of error. I would use the log transformation method to do this.
+
+```{r}
+optimised_mam.lm<-lm(formula = log(cf_data$Energy.Kwh.) ~ cf_data$WEIGHT_OF_CO2_per_time_visited.grams. + cf_data$Google_page_insights + cf_data$HTTP_REQUEST + cf_data$FINDABILITY.Mozrank.+cf_data$GREEN_HOSTING)
+
+summary(optimised_mam.lm)
+plot(optimised_mam.lm)
+```
+Now it is evident from my result this model is very significant owing from the value of its Adjusted Rsquared which is 73% and its F-statistic.
+
+Now i move on to calculate my Confidence Interval and Sigma (residual standard error)
+
+```{r}
+#Calculating the sigma
+
+sigma(optimised_mam.lm)/mean(cf_data$Energy.Kwh.)
+
+
+#calculating the confidence interval
+confint(optimised_mam.lm)
+```
+I am 97.5% confident my mean is between 4.978 and 5.996. I also do have a good value of sigma which is 0.00059.
+
+From the values gotten from my model, this model can be used to predict the energy produced by other variables that make up the carbon footprint of companies.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
