@@ -1,0 +1,345 @@
+---
+title: "CS5801 Coursework Template Proforma"
+author: '2012754'
+date: "`r format(8:12pm, '2020-12-21')`"
+output:
+  html_notebook: default
+  pdf_document: default
+version: 1
+---
+
+# 0. Instructions 
+
+*1. Remove the (italicised) guidance text but keep the section headings.*  
+*2. Add as many chunks of R code as required.*  
+*3. Add descriptions of your analysis plans and explanations of your code and findings.  Please be detailed and where you have made choices explain the rationale for them.*  
+*4. Write your report using RMarkdown.  For guidance see a [helpful blog](https://www.dataquest.io/blog/r-markdown-guide-cheatsheet/#tve-jump-17333da0719) or use the R Markdown cheatsheet which can be accessed from within RStudio by selecting `Help > Cheatsheets > R Markdown Cheat Sheet`.*  
+*5. Your report should be clearly and professionally presented with appropriate use of cited external sources. (5 marks)*  
+*6. It should also be easy to understand, with well-documented code following the principles of literate programming. (5 marks)*  
+
+```{r}
+# Add code here to load any required libraries with `library()`.
+install.packages("validate")
+install.packages("ggplot2")
+install.packages("gridextra")
+install.packages("tidyverse")
+# We suggest you use `install.package()` for any required packages externally to this document 
+# since installation only need be done once.
+getwd()
+install.packages("mice")
+library(mice)
+
+
+
+```
+
+
+# 1. Organise and clean the data
+
+## 1.1 Subset the data into the specific dataset allocated
+ 
+
+```{r}
+# Code to select the student specific team combination.  
+# Feel free to change it including the data frame name.
+CS5801.data
+
+ my.subset.df <- subset(CS5801.data, teamID.x=="PIT" | teamID.x=="CHN")
+
+```
+
+
+## 1.2 Data quality analysis
+ 
+
+After loading the data
+I viewed the data using the view() function
+```{r}
+View(my.subset.df)
+```
+
+I looked at the structure of the data with the str()and observed it had 15 variables which are : Player ID,TeamID.x,G (Games a player played), R (Number of Runs), H (Number of Hits), AB(At Bats), RBI (Runs Batted In), Weight, Height, Salary, birthDate, career.length, bats (Whether they bat with left or right hand or Both), age (age of the player), hit.ind (If the player made one hit or not)
+```{r}
+str(my.subset.df)
+```
+
+I used the summary function to have a summary of all the variables
+```{r}
+summary(my.subset.df)
+```
+
+
+I noticed some oddities in career length had a negative value so i loaded the validate package to check the quality of the data to be sure
+```{r}
+library(validate)
+```
+After loading the validate i used the validator to set rules for all my variables by defining the rules.
+```{r}
+my.subset.rules <- validator(NonNegR= R >= 0,NonNegH= H >= 0,NonNegAB= AB >= 0,NonNegRBI= RBI >= 0,NonNegweight= weight >= 0,NonNegheight= height >= 0,NonNegsalary= salary >= 0, NonNegCareerlength = career.length >= 0, okbats = is.element(bats, c("L", "R", "B")), okHit.ind = is.element(hit.ind, c("1", "0")))
+```
+Now i can apply these rules to my data set
+```{r}
+qual.check <- confront(my.subset.df, my.subset.rules)
+summary(qual.check)
+```
+I also checked this graphically using the barplot function
+
+```{r}
+barplot(qual.check, xlab = "")
+
+```
+
+ 
+## 1.3 Data cleaning  
+
+After checking the data quality in the previous section i discovered from the output of my validator that careerlength was a negative value which is normally supposed to be above 0.I used the check result function to confirm this oddity in the careerlenght column, then replaced it first with NA
+```{r}
+checkresults <- check_that(my.subset.df, career.length < 0)
+checkresults
+my.subset.df$career.length[my.subset.df$career.length < 0] <- NA
+my.subset.df
+```
+ I loaded the package "mice" from my library to replace the NA with a mean function
+```{r}
+library(mice)
+```
+Then i used the mice function to imput data to replace the NA
+```{r}
+anyNA(my.subset.df)
+mynew.subset.df <- mice(my.subset.df, method = "mean")
+mynew.subset2.df <- complete(mynew.subset.df)
+mynew.subset2.df
+```
+The NA has been successfully replaced, also i observed the column for hit.ind was a numeric variable instead of it being a categorical since the only levels are "0" and "1". So i used the as.factor to convert it to the right thing
+```{r}
+mynew.subset2.df$hit.ind <- as.factor(hit.ind)
+str(mynew.subset2.df)
+summary(mynew.subset2.df)
+```
+This dataset has been cleaned and ready for analysis and modeling
+
+# 2. Exploratory Data Analysis (EDA)
+
+## 2.1 EDA plan
+
+To explore my new dataset i have to first do that graphically after viewing the dataset in the previous section. This would give me a typical view of what my dataset entails to see if there are outliers or also find more errors.
+So i use the summary function one more time to view my data before visualizing graphically using ggplot which i would first load
+```{r}
+library(ggplot2)
+summary(mynew.subset2.df)
+```
+Then graphically i view all the variables univariate first using the ggplot library i loaded at the start of this article
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=G)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of Games")
+```
+This is a histogram showing how the variable games is graphically seen as it appears to look normally spread.
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=R)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of Runs")
+```
+This is a histogram showing how the variable Runs is graphically seen as it appears to be majorly skewed to the left
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=H)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of Hits")
+```
+This is a histogram showing how the variable Hits is graphically seen as it appears to be majorly skewed to the left
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=AB)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of At Bats")
+```
+This is a histogram showing how the variable AtBats is graphically seen as it appears to be majorly skewed to the left
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=RBI)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of RBI")
+```
+This is a histogram showing how the variable RBI is graphically seen as it appears to be majorly skewed to the left
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=weight)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of weight")
+```
+This is a histogram showing how the variable Weight is graphically seen as it appears to look normally spread.
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=height)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of height")
+```
+This is a histogram showing how the variable Height is graphically seen as it appears to be somewhat skewed to the right
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=salary)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of salary")
+```
+This is a histogram showing how the variable salary is graphically seen as it appears to be majorly skewed to the left
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=career.length)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of careerlength")
+```
+This is a histogram showing how the variable careerlength is graphically seen as it appears to look normally spread.
+
+```{r}
+ggplot(data=mynew.subset2.df, aes(x=age)) + geom_histogram(bins=20) + theme_classic() + ggtitle("Histogram of age")
+```
+This is a histogram showing how the variable age is graphically seen as it appears to look normally spread.
+
+Now i view my dataset with multivariate method using salary as a dependent variable and also using scattered plots and box plots
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= G, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs Games")
+```
+From the graph above  when viewed graphically salary vs Games the scatter plot seems evenly spread linearly
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= R, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs Runs")
+```
+
+
+From the graph above Salary vs runs we see the scatter plot has more values spread to the left but generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= H, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs Hits")
+```
+From the graph above of Salary vs Hits we see the scatter plot has more values spread to the left but generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= AB, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs At Bats")
+```
+
+From the graph above of Salary vs At Bats we see the scatter plot has more values spread to the left but generally it looks okay
+```{r}
+ggplot(mynew.subset2.df, aes(x= RBI, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs Runs Batted In")
+```
+From the graph above of Salary vs Runs Batted In we see the scatter plot has more values spread to the left but generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= weight, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs Weight")
+```
+From the graph above of Salary vs Weight we see the scatter plot has more values spread at the centre but generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= height, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs height")
+```
+
+From the graph above of Salary vs Height we see the scatter plot has more values spread slightly to the right but generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= career.length, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs careerlength")
+```
+
+From the graph above of Salary vs career length we see the scatter plot looks almost evenly spread and generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= age, y= salary)) + geom_point()+ theme_classic()+ ggtitle("Salary vs age")
+```
+
+From the graph above of Salary vs age we see the scatter plot looks almost evenly spread and generally it looks okay
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= bats, y= salary)) + geom_boxplot()+ theme_classic()+ ggtitle("Salary vs Bats")
+```
+From the graph above of Salary vs Bats we see there are two outliers for people who bat with their left (1 found) and with their right (1 found) while also seeing the median is quite low for people who use both hands.
+
+```{r}
+ggplot(mynew.subset2.df, aes(x= hit.ind, y= salary)) + geom_boxplot()+ theme_classic()+ ggtitle("Salary vs hit.ind")
+```
+From the graph above of Salary vs Hit.Ind i see there are 2 outliers for a player that never had a Hit while one outlier was spotted for players that has at least one hit.
+
+
+## 2.2 EDA and summary of results  
+
+Summary of my Results:
+ After graphically viewing my dataset i observed using the univariate method the variables Games,Weight,height and Career length variables were evenly symmetrically skewed to the centre, while the variables Runs, Hits, Atbats, Runs Batted In and Salary were visibly skewed to the left.
+ 
+ Also using the multivariate method with the salary variable as the dependent variable i observed the variables Games, career length, age, weight and height were evenly spread while the variables Runs, Hits, AtBats, Runs batted In were visibly spread to the left although generally it looks okay. On the other hand i also observed the variable bats had one outlier for players who bat with their left hand and one outlier for players who bat with their right hand, similarly for the variable Hit.Ind i observed two outliers for players who made zero hits and one outlier for players who made at least one hit.
+
+
+## 2.3 Additional insights and issues
+
+Specifically the outliers found in the previous section might seem to potentially affect the output of results when the dataset is fully analyzed or a model is built.Although this can be ignored as the variables with the outliers are categorical variables and might have resulted from an absence of the player from the team on some days during the season.
+
+
+# 3. Modelling
+
+## 3.1 Build a model for player salary
+
+In building a model for Salary which is a numeric variable as the dependent and we have a mixture of numeric and categorical variables as the explanatory variable so we use MULTIPLE REGRESSION to build this model
+```{r}
+model.salary.lm <- lm(mynew.subset2.df$salary~ mynew.subset2.df$G+mynew.subset2.df$R+mynew.subset2.df$H+mynew.subset2.df$AB+mynew.subset2.df$RBI+mynew.subset2.df$weight+mynew.subset2.df$height+mynew.subset2.df$birthDate+mynew.subset2.df$career.length+mynew.subset2.df$bats+mynew.subset2.df$age+mynew.subset2.df$hit.ind)
+summary(model.salary.lm)
+
+```
+
+The Rsquared value is below 50% so this is not looking good now we use the step function to simplify the model
+
+```{r}
+step(model.salary.lm)
+```
+After using the step function i see most of the categorical are now visibly absent.so i would test its residuals now
+```{r}
+mam.lm <- lm(formula = mynew.subset2.df$salary ~ mynew.subset2.df$R+mynew.subset2.df$AB+mynew.subset2.df$birthDate+mynew.subset2.df$G+mynew.subset2.df$H+mynew.subset2.df$RBI+mynew.subset2.df$career.length)
+summary(mam.lm)
+```
+Our salary model equation = 6640101.9+ 97780.8R + 34302.2AB - 699.0Birthdate - 36333.2G -174799.1H + 91859.2RBI + 331882.7careerlength.
+
+It is evident that most of the variable that was viewed graphically in the previous sections are significant to a large extent also the variables that had outliers has been totally removed by this model reiterating that they are needed so much in the building of this model.
+
+So i scrutinise the residual next by plotting mam.lm
+```{r}
+plot(mam.lm)
+```
+
+
+
+## 3.2 Critique model using relevant diagnostics
+
+The model has a Rsquare value less than 50% so it is not a good model although most of its coefficients are significant. This model explains only 39% of the data variability which is not so good.
+
+In the first graph the residuals look okay as the variance is looking steady, also the QQ plot is also looking aligned 
+
+## 3.3 Suggest improvements to your model
+
+*Based on the findings in 3.2 articulates possible alternative approaches to address them (5 marks).*
+if we have higher values for R squared possible closer to 1 or above 50% then we have a good model for our salary.
+
+# 4. Extension work
+
+## 4.1 Model the likelihood of a player having scored a Hit (using the hit.ind variable provided).
+
+In building a model for Hit.ind which is a categorical variable more like binomial as the dependent and we have a mixture of numeric and categorical variables as the explanatory variable so we use LOGISTIC REGRESSION to build this model
+```{r}
+model.hitind.glm <- glm(mynew.subset2.df$hit.ind ~ mynew.subset2.df$G+mynew.subset2.df$R+mynew.subset2.df$H+mynew.subset2.df$AB+mynew.subset2.df$RBI+mynew.subset2.df$weight+mynew.subset2.df$height+mynew.subset2.df$birthDate+mynew.subset2.df$career.length+mynew.subset2.df$bats+mynew.subset2.df$age+mynew.subset2.df$salary, family = "binomial")
+summary(model.hitind.glm)
+```
+From this we can see age,salary,bats R and L, birthdate,height,RBI are not significant 
+```{r}
+exp(coef(model.hitind.glm))
+```
+To simplify this we use a step function
+```{r}
+step(model.hitind.glm)
+```
+
+Now we have our minimum adequate model we can now test its residual
+```{r}
+mam.glm <- glm(mynew.subset2.df$hit.ind ~ mynew.subset2.df$R + mynew.subset2.df$AB + mynew.subset2.df$birthDate + mynew.subset2.df$G + mynew.subset2.df$H + mynew.subset2.df$weight + mynew.subset2.df$career.length, family = "binomial")
+
+summary(mam.glm)
+```
+I would use this model as most of its coefficients are significant.
+
+Hit.ind model = 0.9219511 - 0.2713959 R + 0.1113895 AB + 0.0015898Birthdate - 0.0598573 G -0.1857590 H - 0.0523834weight + 0.3783634 careerlength 
+
+All coefficients are significant in this model so next we look at the residual with the plot function
+
+```{r}
+plot(mam.glm)
+```
+
+From the graphs above we see the residual is almost fitted along the line, while the QQ plot is also looking well aligned also.
+
+# References  
+https://rforpoliticalscience.com/2020/07/28/impute-missing-values-with-mice-package-in-r/
+https://www.loom.com/share/a6a6d0f53c3e4ae381f37f89cca804cb
+https://www.loom.com/share/5fdbaf30334047549ee6893a40987cec
+https://raw.githubusercontent.com/mjshepperd/CS5702-Data/master/CS5702_W3_NASAdata.Rmd
+Lab 6 part 2 solution
+lab 7 part 2 solution
+Lab 5 part 2 solution
+Lab 3 part 2 solution
+Lab 4 part 2 solution
